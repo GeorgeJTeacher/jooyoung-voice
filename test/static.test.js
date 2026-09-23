@@ -35,3 +35,22 @@ test('listener intro and automatic audio quality flow are wired', async () => {
   assert.match(source,/\.getStats\(\)/);
   assert.match(source,/type:'quality'/);
 });
+
+test('v1.2 guide drawer and rectangle zoom are wired', async () => {
+  const markup=await readFile('guide.html','utf8');
+  const source=await readFile('src/guide.js','utf8');
+  const viewer=await readFile('src/shared/pdf-viewer.js','utf8');
+  assert.match(markup,/id="control-panel-reopen"/);
+  assert.match(markup,/data-tool="zoom-box"/);
+  assert.match(markup,/id="zoom-back"/);
+  assert.match(source,/viewForRect\(stroke\.points\)/);
+  assert.match(viewer,/viewForRect\(points\)/);
+});
+
+test('participant PDF follows voting controls without manual navigation', async () => {
+  const markup=await readFile('listen.html','utf8');
+  const source=await readFile('src/listen.js','utf8');
+  assert.ok(markup.indexOf('id="yes-button"') < markup.indexOf('class="listener-document"'));
+  assert.doesNotMatch(markup,/id="follow-toggle"|id="manual-pages"/);
+  assert.doesNotMatch(source,/manualPage|jumpToGuide/);
+});

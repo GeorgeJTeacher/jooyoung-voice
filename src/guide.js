@@ -15,6 +15,7 @@ const state = {
   loadedPdfVersion: 0, meterContext: null, meterAnimation: 0,
   viewPointers: new Map(), pinchStart: null, pendingView:null, viewTimer: 0, zoomTimer:0,
   laserActive: false, laserSentAt: 0, laserHistory: [], toolLabelTimer: 0,
+  viewHistory: [], zoomSelection: null,
   mixContext: null, micGain: null, musicGain: null, musicSource: null,
 };
 
@@ -42,6 +43,7 @@ async function init() {
 
 function bindControls() {
   $('#control-panel-toggle').addEventListener('click', () => setControlPanelCollapsed(!$('.control-panel').classList.contains('collapsed')));
+  $('#control-panel-reopen').addEventListener('click', () => setControlPanelCollapsed(false));
   $('#broadcast-button').addEventListener('click', startBroadcast);
   $('#mute-button').addEventListener('click', toggleMute);
   $('#stop-button').addEventListener('click', stopBroadcast);
@@ -56,6 +58,7 @@ function bindControls() {
   $('#zoom-in').addEventListener('click', () => changeZoom(viewer.view.scale + .25));
   $('#zoom-out').addEventListener('click', () => changeZoom(viewer.view.scale - .25));
   $('#zoom-reset').addEventListener('click', () => applyGuideView({ scale:1, x:.5, y:.5 }));
+  $('#zoom-back').addEventListener('click', restorePreviousView);
   document.querySelectorAll('[data-tool]').forEach((button) => button.addEventListener('click', () => {
     document.querySelectorAll('[data-tool]').forEach((b) => b.classList.remove('active'));
     button.classList.add('active'); state.currentTool = button.dataset.tool; showToolLabel(button);
@@ -86,8 +89,9 @@ function setControlPanelCollapsed(collapsed) {
   const panel=$('.control-panel'), button=$('#control-panel-toggle');
   panel.classList.toggle('collapsed',collapsed);
   $('.workspace').classList.toggle('controls-collapsed',collapsed);
+  $('#control-panel-reopen').classList.toggle('hidden',!collapsed);
   button.setAttribute('aria-expanded',String(!collapsed));
-  button.querySelector('span').textContent=collapsed?'방송 · 참가 QR 펼치기':'방송 · 참가 QR';
+  button.querySelector('span').textContent='방송 · 참가 QR';
 }
 
 function showToolLabel(button){ document.querySelectorAll('.tool-button.show-label').forEach(b=>b.classList.remove('show-label')); clearTimeout(state.toolLabelTimer); button.classList.add('show-label'); state.toolLabelTimer=setTimeout(()=>button.classList.remove('show-label'),1100); }
@@ -317,8 +321,10 @@ async function loadPdf(version) {
   wsSend({ type: 'snapshot:page', page: viewer.pageNumber });
 }
 
-async function changeZoom(scale) { const current=viewer.getView(); await applyGuideView({ ...current, scale }); }
+async function changeZoom(scale) { const current=viewer.getView(); rememberView(current); await applyGuideView({ ...current, scale }); }
 async function applyGuideView(view) { await viewer.setView(view); $('#zoom-reset').textContent=`${Math.round(viewer.view.scale*100)}%`; wsSend({type:'view',view:viewer.getView()}); }
+function rememberView(view=viewer.getView()){const last=state.viewHistory.at(-1);if(!last||Math.abs(last.scale-view.scale)>.01||Math.abs(last.x-view.x)>.01||Math.abs(last.y-view.y)>.01)state.viewHistory.push({...view});state.viewHistory=state.viewHistory.slice(-8);$('#zoom-back').disabled=state.viewHistory.length===0;}
+async function restorePreviousView(){const previous=state.viewHistory.pop();if(!previous)return;$('#zoom-back').disabled=state.viewHistory.length===0;await applyGuideView(previous);}
 function scheduleViewBroadcast() { clearTimeout(state.viewTimer); state.viewTimer=setTimeout(() => wsSend({type:'view',view:viewer.getView()}),120); }
 function touchDistance() { const points=[...state.viewPointers.values()]; if(points.length<2)return 0; return Math.hypot(points[0].x-points[1].x,points[0].y-points[1].y); }
 function touchMidpoint(){const points=[...state.viewPointers.values()];return{x:(points[0].x+points[1].x)/2,y:(points[0].y+points[1].y)/2};}
@@ -329,7 +335,8 @@ function viewPointerUp(event) { if(event.pointerType!=='touch')return; state.vie
 async function changePage(page) {
   if (!viewer.pdf) return;
   page = Math.min(Math.max(page, 1), viewer.pdf.numPages);
-  await viewer.renderPage(page); updatePageUI(); wsSend({ type: 'page', page }); wsSend({ type: 'snapshot:page', page });
+  state.viewHistory=[]; $('#zoom-back').disabled=true; await viewer.setView({scale:1,x:.5,y:.5},false);
+  await viewer.renderPage(page); updatePageUI(); $('#zoom-reset').textContent='100%'; wsSend({ type: 'page', page }); wsSend({type:'view',view:viewer.getView()}); wsSend({ type: 'snapshot:page', page });
 }
 function updatePageUI() { $('#page-number').textContent = viewer.pdf ? viewer.pageNumber : 0; $('#page-count').textContent = viewer.pdf?.numPages || 0; }
 
@@ -340,6 +347,10 @@ function pointerDown(event) {
   event.preventDefault(); $('#ink-canvas').setPointerCapture(event.pointerId);
   const pt = viewer.pointerToNormalized(event);
   if (state.currentTool === 'laser') { state.laserActive=true; sendLaser(pt,true); return; }
+  if (state.currentTool === 'zoom-box') {
+    const selection={id:makeId('z'),page:viewer.pageNumber,tool:'zoom-box',color:'#3aa8ff',width:.004,opacity:.95,points:[pt.x,pt.y,pt.p,pt.x,pt.y,pt.p]};
+    state.zoomSelection=selection; state.drawing=selection; viewer.startLiveStroke(selection); return;
+  }
   if (state.currentTool === 'eraser') {
     const id = viewer.hitTest(pt.x, pt.y, 0.028); if (id) wsSend({ type: 'stroke:remove', page: viewer.pageNumber, id });
     return;
@@ -356,14 +367,21 @@ function pointerMove(event) {
   }
   if (!state.drawing || (event.pointerType!=='touch'&&!event.buttons)) return;
   event.preventDefault(); const pt = viewer.pointerToNormalized(event);
-  if(state.drawing.tool==='rect'){ state.drawing.points.splice(3,3,pt.x,pt.y,pt.p); viewer.updateLiveStroke(state.drawing.id,state.drawing.points); return; }
+  if(state.drawing.tool==='rect'||state.drawing.tool==='zoom-box'){ state.drawing.points.splice(3,3,pt.x,pt.y,pt.p); viewer.updateLiveStroke(state.drawing.id,state.drawing.points); return; }
   state.drawing.points.push(pt.x, pt.y, pt.p); viewer.appendLivePoints(state.drawing.id, [pt.x, pt.y, pt.p]); state.pointBatch.push(pt.x, pt.y, pt.p);
   if (!state.batchTimer) state.batchTimer = setTimeout(flushPointBatch, 35);
 }
 function flushPointBatch() { state.batchTimer = 0; if (!state.drawing || !state.pointBatch.length) return; wsSend({ type: 'stroke:points', id: state.drawing.id, page: state.drawing.page, points: state.pointBatch.splice(0) }); }
-function pointerUp() {
+async function pointerUp() {
   if(state.laserActive){state.laserActive=false; wsSend({type:'laser',active:false}); renderLaser({x:0,y:0},false); return;}
-  if (!state.drawing) return; flushPointBatch(); const stroke = state.drawing; state.drawing = null; viewer.addStroke(stroke.page, stroke); viewer.finishLiveStroke(stroke.id); wsSend({ type: 'stroke:end', id: stroke.id, page: stroke.page, stroke });
+  if (!state.drawing) return; flushPointBatch(); const stroke = state.drawing; state.drawing = null;
+  if(stroke.tool==='zoom-box'){
+    viewer.finishLiveStroke(stroke.id); state.zoomSelection=null;
+    const view=viewer.viewForRect(stroke.points);
+    if(!view){showToast(toast,'확대할 부분을 조금 더 크게 선택해주세요.');return;}
+    rememberView(); await new Promise(resolve=>setTimeout(resolve,220)); await applyGuideView(view); return;
+  }
+  viewer.addStroke(stroke.page, stroke); viewer.finishLiveStroke(stroke.id); wsSend({ type: 'stroke:end', id: stroke.id, page: stroke.page, stroke });
 }
 
 function cancelDrawing(){ if(!state.drawing)return; const id=state.drawing.id; viewer.finishLiveStroke(id); state.drawing=null; state.pointBatch=[]; clearTimeout(state.batchTimer); state.batchTimer=0; wsSend({type:'stroke:cancel',id}); }

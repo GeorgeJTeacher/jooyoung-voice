@@ -6,7 +6,7 @@ const listenerId = getListenerId();
 const $ = (s) => document.querySelector(s);
 const toast = $('#toast');
 const viewer = new PdfInkViewer({ pdfCanvas: $('#pdf-canvas'), inkCanvas: $('#ink-canvas'), frame: $('#pdf-frame'), stage: $('#pdf-stage') });
-const state = { ws: null, wsAttempt: 0, pc: null, rtc: null, wantAudio: false, playing: false, connecting: false, connectionGeneration: 0, audioAvailable: false, audioPaused: false, guidePage: 1, follow: true, pdfVersion: 0, wakeLock: null, reconnectTimer: null, confirmTimer: null, laserTimer: null, laserHistory:[], meta: null, audioSourceVersion: 0, ticketWaiter: null, audioContext: null, audioGain: null, audioSourceNode: null, exiting:false, accessToken:'', qualityTimer:null, previousInbound:null, qualityBadStreak:0, qualityGoodStreak:0, lastQuality:'unknown', reconnectFailures:0, recoveryCooldownUntil:0 };
+const state = { ws: null, wsAttempt: 0, pc: null, rtc: null, wantAudio: false, playing: false, connecting: false, connectionGeneration: 0, audioAvailable: false, audioPaused: false, guidePage: 1, pdfVersion: 0, wakeLock: null, reconnectTimer: null, confirmTimer: null, laserTimer: null, laserHistory:[], meta: null, audioSourceVersion: 0, ticketWaiter: null, audioContext: null, audioGain: null, audioSourceNode: null, exiting:false, accessToken:'', qualityTimer:null, previousInbound:null, qualityBadStreak:0, qualityGoodStreak:0, lastQuality:'unknown', reconnectFailures:0, recoveryCooldownUntil:0 };
 
 function makeClientId(){ if(crypto.randomUUID)return crypto.randomUUID(); const bytes=crypto.getRandomValues(new Uint8Array(16)); return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(''); }
 function getListenerId(){ const key='guide-live-listener-id'; try{ let id=localStorage.getItem(key); if(!id){id=makeClientId();localStorage.setItem(key,id);} return id; }catch{return makeClientId();} }
@@ -36,9 +36,6 @@ function bind() {
   $('#yes-button').addEventListener('click', () => sendVote('yes'));
   $('#no-button').addEventListener('click', () => sendVote('no'));
   $('#exit-button').addEventListener('click', endParticipation);
-  $('#follow-toggle').addEventListener('change', async (e) => { state.follow = e.target.checked; $('#manual-pages').classList.toggle('hidden', state.follow); if (state.follow) await jumpToGuide(); });
-  $('#jump-guide').addEventListener('click', jumpToGuide);
-  $('#prev-page').addEventListener('click', () => manualPage(viewer.pageNumber - 1)); $('#next-page').addEventListener('click', () => manualPage(viewer.pageNumber + 1));
   document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && state.wantAudio && !state.wakeLock) state.wakeLock = await requestWakeLock(); });
 }
 
@@ -99,9 +96,8 @@ async function handleWs(event) {
     state.ticketWaiter?.resolve(m.ticket);
     state.ticketWaiter = null;
   } else if (m.type === 'page') {
-    state.guidePage = m.page; $('#jump-guide').querySelector('b').textContent = m.page;
-    if (state.follow && viewer.pdf) { await viewer.renderPage(m.page); updatePages(); wsSend({ type: 'snapshot:page', page: m.page }); $('#guide-page-hint').classList.add('hidden'); }
-    else if (!state.follow && viewer.pageNumber !== m.page) $('#guide-page-hint').classList.remove('hidden');
+    state.guidePage = m.page;
+    if (viewer.pdf) { await viewer.renderPage(m.page); wsSend({ type: 'snapshot:page', page: m.page }); }
   } else if (m.type === 'view') {
     state.guideView = m.view; if(viewer.pdf) await viewer.setView(m.view);
   } else if (m.type === 'laser') {
@@ -271,11 +267,8 @@ function reportQuality(level,loss,jitter){wsSend({type:'quality',level,loss:Math
 
 async function loadPdf(version) {
   state.pdfVersion = Number(version); $('#empty-document').classList.add('hidden'); $('#pdf-stage').classList.remove('hidden'); $('#pdf-name').textContent = state.meta?.pdfName || '답사 자료';
-  const count = await viewer.load(`/api/rooms/${room}/pdf?v=${version}`, state.accessToken ? { 'X-Listener-Token':state.accessToken } : undefined); $('#page-count').textContent = count;
-  const page = Math.min(state.guidePage || 1, count); await viewer.renderPage(page); if(state.guideView)await viewer.setView(state.guideView); updatePages(); wsSend({ type: 'snapshot:page', page });
+  const count = await viewer.load(`/api/rooms/${room}/pdf?v=${version}`, state.accessToken ? { 'X-Listener-Token':state.accessToken } : undefined);
+  const page = Math.min(state.guidePage || 1, count); await viewer.renderPage(page); if(state.guideView)await viewer.setView(state.guideView); wsSend({ type: 'snapshot:page', page });
 }
-function updatePages() { $('#page-number').textContent = viewer.pdf ? viewer.pageNumber : 0; $('#page-count').textContent = viewer.pdf?.numPages || 0; }
-async function manualPage(page) { if (!viewer.pdf || state.follow) return; page = Math.min(Math.max(1,page),viewer.pdf.numPages); await viewer.renderPage(page); updatePages(); wsSend({ type:'snapshot:page', page }); $('#guide-page-hint').classList.toggle('hidden', page === state.guidePage); }
-async function jumpToGuide() { if (!viewer.pdf) return; await viewer.renderPage(state.guidePage); updatePages(); wsSend({ type:'snapshot:page', page:state.guidePage }); $('#guide-page-hint').classList.add('hidden'); }
 
 init().catch((error) => showFatalError('답사 방에 들어갈 수 없습니다.', error));

@@ -84,6 +84,19 @@ export class PdfInkViewer {
     return { scale: this.view.scale, x:Math.min(1,Math.max(0,this.view.x)), y:Math.min(1,Math.max(0,this.view.y)) };
   }
 
+  viewForRect(points) {
+    if (!Array.isArray(points) || points.length < 6) return null;
+    const x1=Math.min(points[0],points[3]), x2=Math.max(points[0],points[3]);
+    const y1=Math.min(points[1],points[4]), y2=Math.max(points[1],points[4]);
+    const width=x2-x1, height=y2-y1;
+    if (width < .04 || height < .04) return null;
+    const baseWidth=this.frame.clientWidth/Math.max(1,this.view.scale);
+    const baseHeight=this.frame.clientHeight/Math.max(1,this.view.scale);
+    const usableWidth=Math.max(1,this.stage.clientWidth-16), usableHeight=Math.max(1,this.stage.clientHeight-16);
+    const scale=Math.min(4,Math.max(1,Math.min(usableWidth/(baseWidth*width),usableHeight/(baseHeight*height))*.92));
+    return { scale, x:(x1+x2)/2, y:(y1+y2)/2 };
+  }
+
   applyCenter() {
     requestAnimationFrame(() => {
       const maxX = Math.max(0, this.stage.scrollWidth - this.stage.clientWidth);
@@ -193,8 +206,9 @@ export class PdfInkViewer {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (stroke.tool === 'highlighter') ctx.globalCompositeOperation = 'multiply';
-    if (stroke.tool === 'rect' && pts.length >= 6) {
+    if ((stroke.tool === 'rect' || stroke.tool === 'zoom-box') && pts.length >= 6) {
       const x=pts[0]*width, y=pts[1]*height, w=pts[3]*width-x, h=pts[4]*height-y;
+      if(stroke.tool==='zoom-box'){ctx.setLineDash([10,7]);ctx.fillStyle='rgba(58,168,255,.12)';ctx.fillRect(x,y,w,h);}
       ctx.strokeRect(x,y,w,h); ctx.restore(); return;
     }
     ctx.beginPath();

@@ -34,7 +34,7 @@
     </section>
 
     <section id="listener-content" class="listener-protected hidden">
-    <section class="listen-card">
+    <section class="listen-card listener-command-card">
       <div class="listen-status">
         <span id="live-dot" class="live-dot"></span>
         <div><strong id="audio-status">가이드 방송을 기다리는 중</strong><span id="listener-count">현재 0명 접속</span></div>
@@ -45,30 +45,27 @@
         <button id="no-button" class="vote-button no" type="button">🔴 아니요!</button>
       </div>
       <p id="vote-note" class="confirm-note">응답은 10초 동안 가이드에게 표시됩니다.</p>
-      <div class="volume-row">
-        <span>작게</span><input id="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="음량" /><span>크게</span>
-      </div>
-      <p class="safety-note">주변 상황을 확인할 수 있는 음량으로 들어주세요.</p>
-      <button id="exit-button" class="exit-button" type="button">참가 종료</button>
       <audio id="live-audio" autoplay playsinline></audio>
     </section>
 
     <section class="listener-document">
       <div class="document-toolbar listener-toolbar">
         <div><span class="doc-name" id="pdf-name">자료 준비 중</span></div>
-        <label class="follow-toggle"><input id="follow-toggle" type="checkbox" checked /><span>가이드 따라가기</span></label>
+        <span class="following-label">가이드 화면</span>
       </div>
-      <div id="guide-page-hint" class="guide-page-hint hidden"><button id="jump-guide" type="button">가이드가 <b>1</b>쪽을 설명 중 · 이동</button></div>
       <div id="empty-document" class="empty-document compact-empty"><div class="empty-icon">PDF</div><h2>가이드 자료를 기다리는 중</h2></div>
       <div id="pdf-stage" class="pdf-stage listener-stage hidden">
         <div id="pdf-frame" class="pdf-frame"><canvas id="pdf-canvas"></canvas><canvas id="ink-canvas"></canvas><i id="laser-dot" class="laser-dot"></i></div>
       </div>
-      <div id="manual-pages" class="page-controls listener-pages hidden">
-        <button id="prev-page" class="icon-button" type="button">‹</button>
-        <span><b id="page-number">0</b> / <span id="page-count">0</span></span>
-        <button id="next-page" class="icon-button" type="button">›</button>
-      </div>
     </section>
+    <details class="listener-options">
+      <summary>음량 · 참가 종료</summary>
+      <div class="listener-options-body">
+        <div class="volume-row"><span>작게</span><input id="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="음량" /><span>크게</span></div>
+        <p class="safety-note">주변 상황을 확인할 수 있는 음량으로 들어주세요.</p>
+        <button id="exit-button" class="exit-button" type="button">참가 종료</button>
+      </div>
+    </details>
     </section>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>

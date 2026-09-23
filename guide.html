@@ -29,9 +29,10 @@
     </header>
 
     <main class="workspace">
+      <button id="control-panel-reopen" class="control-panel-reopen hidden" type="button" aria-label="방송과 참가 QR 열기">›</button>
       <aside class="control-panel">
         <button id="control-panel-toggle" class="control-panel-toggle" type="button" aria-expanded="true">
-          <span>방송 · 참가 QR</span><b aria-hidden="true">▴</b>
+          <span>방송 · 참가 QR</span><b aria-hidden="true">‹</b>
         </button>
         <div id="control-panel-content" class="control-panel-content">
         <section class="panel-section audio-panel">
@@ -85,6 +86,7 @@
           <button class="tool-button icon-only active" data-tool="pen" type="button" aria-label="펜">✎ <span>펜</span></button>
           <button class="tool-button icon-only" data-tool="highlighter" type="button" aria-label="형광펜">▰ <span>형광펜</span></button>
           <button class="tool-button icon-only" data-tool="rect" type="button" aria-label="사각형">□ <span>사각형</span></button>
+          <button class="tool-button icon-only zoom-box-tool" data-tool="zoom-box" type="button" aria-label="사각 확대">⌕ <span>사각 확대</span></button>
           <button class="tool-button icon-only laser-tool" data-tool="laser" type="button" aria-label="레이저">● <span>레이저</span></button>
           <button class="tool-button icon-only" data-tool="eraser" type="button" aria-label="지우개">⌫ <span>지우개</span></button>
           <button class="tool-button icon-only" data-tool="pan" type="button" aria-label="이동">✋ <span>이동</span></button>
@@ -95,6 +97,7 @@
           <span class="tool-separator"></span>
           <button id="undo-button" class="tool-button icon-only" type="button" aria-label="실행취소">↶ <span>실행취소</span></button>
           <button id="clear-button" class="tool-button icon-only" type="button" aria-label="현재 쪽 지우기">⌧ <span>현재 쪽 지우기</span></button>
+          <button id="zoom-back" class="tool-button icon-only" type="button" aria-label="이전 화면" disabled>↩ <span>이전 화면</span></button>
         </div>
 
         <div id="empty-document" class="empty-document">
