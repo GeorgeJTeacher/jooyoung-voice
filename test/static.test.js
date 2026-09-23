@@ -65,3 +65,17 @@ test('rectangle focus is validated and recalculated for listeners', async () => 
   assert.match(listener,/m\.type === 'focus'/);
   assert.match(listener,/viewer\.viewForRegion\(m\.region\)/);
 });
+
+test('rectangle focus center is not overwritten before scrolling', async () => {
+  const viewer=await readFile('src/shared/pdf-viewer.js','utf8');
+  const setView=viewer.match(/async setView\(view,[\s\S]*?\n  }\n\n  getView/)?.[0] || '';
+  assert.match(setView,/return \{ \.\.\.this\.view \}/);
+  assert.doesNotMatch(setView,/return this\.getView\(\)/);
+  assert.doesNotMatch(viewer,/applyCenter\(\) \{\s*requestAnimationFrame/);
+});
+
+test('iPad guide drawer scrolls in a single column', async () => {
+  const css=await readFile('src/app.css','utf8');
+  assert.match(css,/\.control-panel \{[^}]*overflow-y:auto/);
+  assert.match(css,/@media \(max-width: 820px\)[\s\S]*?\.control-panel-content \{ display:flex; flex-direction:column; \}/);
+});

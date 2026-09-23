@@ -75,7 +75,7 @@ export class PdfInkViewer {
     this.view = next;
     if (rerender && this.pdf && scaleChanged) await this.renderPage(this.pageNumber, true);
     else this.applyCenter();
-    return this.getView();
+    return { ...this.view };
   }
 
   getView() {
@@ -106,15 +106,13 @@ export class PdfInkViewer {
   }
 
   applyCenter() {
-    requestAnimationFrame(() => {
-      const stageRect=this.stage.getBoundingClientRect(), frameRect=this.frame.getBoundingClientRect();
-      const frameLeft=frameRect.left-stageRect.left+this.stage.scrollLeft;
-      const frameTop=frameRect.top-stageRect.top+this.stage.scrollTop;
-      const maxX = Math.max(0, this.stage.scrollWidth - this.stage.clientWidth);
-      const maxY = Math.max(0, this.stage.scrollHeight - this.stage.clientHeight);
-      this.stage.scrollLeft = Math.min(maxX, Math.max(0, frameLeft + this.view.x * this.frame.clientWidth - this.stage.clientWidth / 2));
-      this.stage.scrollTop = Math.min(maxY, Math.max(0, frameTop + this.view.y * this.frame.clientHeight - this.stage.clientHeight / 2));
-    });
+    const stageRect=this.stage.getBoundingClientRect(), frameRect=this.frame.getBoundingClientRect();
+    const frameLeft=frameRect.left-stageRect.left+this.stage.scrollLeft;
+    const frameTop=frameRect.top-stageRect.top+this.stage.scrollTop;
+    const maxX = Math.max(0, this.stage.scrollWidth - this.stage.clientWidth);
+    const maxY = Math.max(0, this.stage.scrollHeight - this.stage.clientHeight);
+    this.stage.scrollLeft = Math.min(maxX, Math.max(0, frameLeft + this.view.x * this.frame.clientWidth - this.stage.clientWidth / 2));
+    this.stage.scrollTop = Math.min(maxY, Math.max(0, frameTop + this.view.y * this.frame.clientHeight - this.stage.clientHeight / 2));
   }
 
   setPageStrokes(page, strokes = []) {
