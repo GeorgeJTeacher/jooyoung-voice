@@ -6,20 +6,19 @@ const listenerId = getListenerId();
 const $ = (s) => document.querySelector(s);
 const toast = $('#toast');
 const viewer = new PdfInkViewer({ pdfCanvas: $('#pdf-canvas'), inkCanvas: $('#ink-canvas'), frame: $('#pdf-frame'), stage: $('#pdf-stage') });
-const state = { ws: null, wsAttempt: 0, pc: null, rtc: null, wantAudio: false, playing: false, connecting: false, connectionGeneration: 0, audioAvailable: false, audioPaused: false, guidePage: 1, follow: true, pdfVersion: 0, wakeLock: null, reconnectTimer: null, confirmTimer: null, laserTimer: null, laserHistory:[], meta: null, audioSourceVersion: 0, ticketWaiter: null, audioContext: null, audioGain: null, audioSourceNode: null, exiting:false, accessToken:'' };
+const state = { ws: null, wsAttempt: 0, pc: null, rtc: null, wantAudio: false, playing: false, connecting: false, connectionGeneration: 0, audioAvailable: false, audioPaused: false, guidePage: 1, follow: true, pdfVersion: 0, wakeLock: null, reconnectTimer: null, confirmTimer: null, laserTimer: null, laserHistory:[], meta: null, audioSourceVersion: 0, ticketWaiter: null, audioContext: null, audioGain: null, audioSourceNode: null, exiting:false, accessToken:'', qualityTimer:null, previousInbound:null, qualityBadStreak:0, qualityGoodStreak:0, lastQuality:'unknown', reconnectFailures:0, recoveryCooldownUntil:0 };
 
 function makeClientId(){ if(crypto.randomUUID)return crypto.randomUUID(); const bytes=crypto.getRandomValues(new Uint8Array(16)); return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(''); }
 function getListenerId(){ const key='guide-live-listener-id'; try{ let id=localStorage.getItem(key); if(!id){id=makeClientId();localStorage.setItem(key,id);} return id; }catch{return makeClientId();} }
 
 async function init() {
-  const status = await api(`/api/rooms/${room}/status`); state.meta = status; $('#room-title').textContent = status.title; state.guidePage = status.currentPage || 1;
+  const [status] = await Promise.all([api(`/api/rooms/${room}/status`),sleep(1900)]); state.meta = status; $('#room-title').textContent = status.title; state.guidePage = status.currentPage || 1;
   bind();
+  $('#intro-screen').classList.add('done');
   if(status.accessRequired){
-    state.accessToken=sessionStorage.getItem(`guide-live-access-${room}`)||'';
-    if(state.accessToken){try{await api(`/api/rooms/${room}/access/check`,{method:'POST',headers:{'X-Listener-Token':state.accessToken}});return enterRoom();}catch{state.accessToken='';sessionStorage.removeItem(`guide-live-access-${room}`);}}
     $('#access-card').classList.remove('hidden'); $('#connection-chip').querySelector('b').textContent='비밀번호 필요'; return;
   }
-  await enterRoom();
+  $('#access-card').classList.add('hidden'); $('#listener-content').classList.remove('hidden'); $('#listen-button').classList.remove('hidden'); $('#listen-button').textContent='방송 입장';
 }
 
 async function enterRoom(){ $('#access-card').classList.add('hidden'); $('#listener-content').classList.remove('hidden'); connectWs(); if(state.meta.pdfVersion)await loadPdf(state.meta.pdfVersion); }
@@ -29,7 +28,9 @@ function bind() {
   $('#listen-button').addEventListener('click', async () => {
     try { await unlockAudioOutput(); } catch (error) { return showToast(toast, `휴대폰 소리를 활성화할 수 없습니다: ${error.message}`, 5000); }
     state.wantAudio = true; state.wakeLock ||= await requestWakeLock();
-    if (state.audioAvailable) subscribeAudio(); else { $('#audio-status').textContent = '방송 시작을 기다리는 중'; $('#listen-button').textContent = '연결 대기 중…'; }
+    $('#listen-button').classList.add('hidden'); state.reconnectFailures=0;
+    if(!state.ws)connectWs();
+    if (state.audioAvailable) subscribeAudio(); else $('#audio-status').textContent = '가이드 방송을 기다리는 중';
   });
   $('#volume').addEventListener('input', (e) => { const volume = Number(e.target.value); $('#live-audio').volume = volume; if (state.audioGain) state.audioGain.gain.value = volume; });
   $('#yes-button').addEventListener('click', () => sendVote('yes'));
@@ -41,7 +42,7 @@ function bind() {
   document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && state.wantAudio && !state.wakeLock) state.wakeLock = await requestWakeLock(); });
 }
 
-async function authenticateAccess(event){event.preventDefault();const button=event.currentTarget.querySelector('button'),message=$('#access-message');button.disabled=true;message.textContent='확인 중…';try{const result=await api(`/api/rooms/${room}/access`,{method:'POST',body:{password:$('#access-password').value,clientId:listenerId}});state.accessToken=result.accessToken;sessionStorage.setItem(`guide-live-access-${room}`,state.accessToken);message.textContent='';await enterRoom();}catch(error){message.textContent=error.message;button.disabled=false;}}
+async function authenticateAccess(event){event.preventDefault();const button=event.currentTarget.querySelector('button'),message=$('#access-message');button.disabled=true;message.textContent='확인 중…';try{await unlockAudioOutput();state.wantAudio=true;state.wakeLock||=await requestWakeLock();const result=await api(`/api/rooms/${room}/access`,{method:'POST',body:{password:$('#access-password').value,clientId:listenerId}});state.accessToken=result.accessToken;sessionStorage.setItem(`guide-live-access-${room}`,state.accessToken);message.textContent='';await enterRoom();}catch(error){state.wantAudio=false;message.textContent=error.message;button.disabled=false;}}
 
 async function unlockAudioOutput() {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -60,7 +61,7 @@ async function connectWs() {
   try {
     const {ticket}=await api(`/api/rooms/${room}/listener-ws-ticket`,{method:'POST',headers:{'X-Listener-Token':state.accessToken}});
     const ws = new WebSocket(wsUrl(`/api/rooms/${room}/ws?role=listener&client=${encodeURIComponent(listenerId)}&ticket=${encodeURIComponent(ticket)}`)); state.ws = ws;
-    ws.addEventListener('open', () => { state.wsAttempt = 0; setConnection('live', '연결됨'); });
+    ws.addEventListener('open', () => { state.wsAttempt = 0; setConnection('', '음성 확인 중'); });
     ws.addEventListener('message', handleWs);
     ws.addEventListener('close', async () => { if (state.ws !== ws || state.exiting) return; setConnection('warn', '재연결 중'); state.wsAttempt++; await sleep(Math.min(8000, 500 * 2 ** state.wsAttempt)); connectWs(); });
   } catch { await sleep(1000); connectWs(); }
@@ -84,7 +85,7 @@ async function handleWs(event) {
   const m = JSON.parse(event.data);
   if (m.type === 'hello') {
     state.meta = m.meta; state.audioAvailable = !!m.audioAvailable; state.audioPaused = !!m.audioPaused; state.audioSourceVersion = Number(m.audioVersion || 0); state.guidePage = m.meta.currentPage || 1; $('#listener-count').textContent = `현재 ${m.presence.listeners}명 접속`;
-    if (m.strokes) viewer.setPageStrokes(m.page, m.strokes); updateAudioWaiting();
+    if (m.strokes) viewer.setPageStrokes(m.page, m.strokes); updateAudioWaiting(); if(state.wantAudio&&state.audioAvailable)subscribeAudio();
     state.guideView = m.meta.pdfView || {scale:1,x:.5,y:.5};
     if (m.meta.pdfVersion && m.meta.pdfVersion !== state.pdfVersion) await loadPdf(m.meta.pdfVersion); else if(viewer.pdf) await viewer.setView(state.guideView);
   } else if (m.type === 'presence') {
@@ -131,10 +132,10 @@ function renderLaser(pt,active){ensureLaserTrail();const dot=$('#laser-dot'),tra
 function laserTrailPoints(history,count,frame){if(history.length<2)return[];const result=[];let segment=0,walked=0;for(let i=0;i<count;i++){const target=(i+1)*6;while(segment<history.length-1){const a=history[segment],b=history[segment+1],length=Math.hypot((a.x-b.x)*frame.clientWidth,(a.y-b.y)*frame.clientHeight);if(walked+length>=target){const ratio=(target-walked)/Math.max(1,length);result.push({x:a.x+(b.x-a.x)*ratio,y:a.y+(b.y-a.y)*ratio});break;}walked+=length;segment++;}if(segment>=history.length-1)break;}return result;}
 
 function updateAudioWaiting() {
-  $('#live-dot').classList.toggle('on', state.audioAvailable);
+  $('#live-dot').classList.toggle('on', state.lastQuality==='good');
   if (state.audioAvailable && state.audioPaused) { $('#audio-status').textContent = '가이드가 방송을 잠시 멈췄습니다'; return; }
   if (!state.wantAudio) { $('#audio-status').textContent = state.audioAvailable ? '가이드가 방송 중입니다' : '가이드 방송을 기다리는 중'; return; }
-  if (!state.audioAvailable) { $('#audio-status').textContent = '방송 시작을 기다리는 중'; $('#listen-button').textContent = '연결 대기 중…'; }
+  if (!state.audioAvailable) $('#audio-status').textContent = '가이드 방송을 기다리는 중';
 }
 
 function sendVote(choice) {
@@ -156,7 +157,7 @@ async function subscribeAudio() {
   state.connecting = true;
   const generation = ++state.connectionGeneration;
   let stage = '연결 준비';
-  clearTimeout(state.reconnectTimer); $('#listen-button').disabled = true; $('#listen-button').textContent = '음성 연결 중…';
+  clearTimeout(state.reconnectTimer); $('#listen-button').disabled = true; $('#audio-status').textContent='음성을 연결하고 있습니다'; setConnection('','음성 확인 중');
   try {
     stopAudio(false, false);
     stage = '음성 우회망 준비';
@@ -196,14 +197,15 @@ async function subscribeAudio() {
       await audio.play();
     }
     ensureCurrent();
-    state.playing = true; $('#listen-button').disabled = false; $('#listen-button').textContent = '🎧 듣는 중'; $('#audio-status').textContent = '가이드 음성 LIVE';
+    state.playing = true; state.reconnectFailures=0; $('#listen-button').disabled = false; $('#listen-button').classList.add('hidden'); $('#audio-status').textContent = '가이드 음성 LIVE'; startQualityMonitor(pc);
     pc.addEventListener('connectionstatechange', () => { if (state.pc === pc && state.wantAudio && ['failed','disconnected'].includes(pc.connectionState)) scheduleReconnect(); });
   } catch (error) {
     if (generation !== state.connectionGeneration) return;
     const detail = `${stage}: ${error?.name || 'Error'} - ${error?.message || '알 수 없는 오류'}`;
     console.error('listener audio failure', detail, error);
     wsSend({ type: 'client:diagnostic', stage, name: error?.name || 'Error', message: error?.message || '알 수 없는 오류' });
-    $('#listen-button').disabled = false; $('#listen-button').textContent = '다시 연결'; $('#audio-status').textContent = `연결 실패 · ${detail}`; showToast(toast, detail, 6000);
+    state.reconnectFailures++; $('#audio-status').textContent = '음성 연결을 자동으로 복구하고 있습니다'; setConnection('','음성 확인 중');
+    if(error?.name==='NotAllowedError'||state.reconnectFailures>=3){$('#listen-button').disabled=false;$('#listen-button').textContent='소리 다시 연결';$('#listen-button').classList.remove('hidden');}
     if (error?.name !== 'NotAllowedError') scheduleReconnect();
   } finally {
     if (generation === state.connectionGeneration) state.connecting = false;
@@ -228,8 +230,44 @@ function requestAudioTicket() {
   return promise;
 }
 
-function scheduleReconnect() { if(state.exiting)return; clearTimeout(state.reconnectTimer); state.reconnectTimer = setTimeout(() => { if(state.exiting)return; state.playing = false; subscribeAudio(); }, 1200); }
-function stopAudio(reset = true, invalidate = true) { if (invalidate) { state.connectionGeneration++; state.connecting = false; } state.pc?.close(); state.pc = null; state.playing = false; state.audioSourceNode?.disconnect(); state.audioSourceNode = null; const audio = $('#live-audio'); audio.pause(); if (audio.srcObject) { audio.srcObject.getTracks().forEach(t => t.stop()); audio.srcObject = null; } if (reset) { $('#listen-button').disabled = false; $('#listen-button').textContent = '🎧 듣기 시작'; } }
+function scheduleReconnect() { if(state.exiting||!state.wantAudio)return; clearTimeout(state.reconnectTimer); const delay=Math.min(8000,1200*Math.max(1,state.reconnectFailures)); state.reconnectTimer = setTimeout(() => { if(state.exiting)return; state.playing = false; subscribeAudio(); }, delay); }
+function stopAudio(reset = true, invalidate = true) { if (invalidate) { state.connectionGeneration++; state.connecting = false; } stopQualityMonitor(); state.pc?.close(); state.pc = null; state.playing = false; state.audioSourceNode?.disconnect(); state.audioSourceNode = null; const audio = $('#live-audio'); audio.pause(); if (audio.srcObject) { audio.srcObject.getTracks().forEach(t => t.stop()); audio.srcObject = null; } if(reset)showManualReconnect(); }
+
+function showManualReconnect(){if(!state.wantAudio)return;$('#listen-button').disabled=false;$('#listen-button').textContent='소리 다시 연결';$('#listen-button').classList.remove('hidden');}
+
+function startQualityMonitor(pc){
+  stopQualityMonitor(); state.previousInbound=null; state.qualityBadStreak=0; state.qualityGoodStreak=0; state.lastQuality='unknown'; reportQuality('unknown',0,0);
+  state.qualityTimer=setInterval(()=>measureQuality(pc),3000); measureQuality(pc);
+}
+
+function stopQualityMonitor(){if(state.qualityTimer)clearInterval(state.qualityTimer);state.qualityTimer=null;state.previousInbound=null;}
+
+async function measureQuality(pc){
+  if(state.pc!==pc||!state.playing||state.exiting)return;
+  if(state.audioPaused){reportQuality('paused',0,0);return;}
+  try{
+    const reports=await pc.getStats();let inbound=null;
+    reports.forEach(report=>{if(report.type==='inbound-rtp'&&(report.kind==='audio'||report.mediaType==='audio')&&!report.isRemote)inbound=report;});
+    if(!inbound){applyQualitySample('unknown',0,0);return;}
+    const now={received:Number(inbound.packetsReceived||0),lost:Number(inbound.packetsLost||0),bytes:Number(inbound.bytesReceived||0),jitter:Number(inbound.jitter||0)*1000};
+    const prev=state.previousInbound;state.previousInbound=now;if(!prev){applyQualitySample('unknown',0,now.jitter);return;}
+    const received=Math.max(0,now.received-prev.received),lost=Math.max(0,now.lost-prev.lost),total=received+lost;
+    const loss=total?lost/total*100:0,progress=now.bytes>prev.bytes;
+    const raw=!progress?'bad':(loss>8||now.jitter>80?'bad':(loss>3||now.jitter>30?'warn':'good'));
+    applyQualitySample(raw,loss,now.jitter);
+  }catch{applyQualitySample('unknown',0,0);}
+}
+
+function applyQualitySample(raw,loss,jitter){
+  if(raw==='good'){state.qualityGoodStreak++;state.qualityBadStreak=0;}else if(raw==='warn'){state.qualityGoodStreak=0;state.qualityBadStreak+=1;}else if(raw==='bad'){state.qualityGoodStreak=0;state.qualityBadStreak+=2;}else{state.qualityGoodStreak=0;}
+  const level=state.qualityGoodStreak>=2?'good':(state.qualityBadStreak>=4?'bad':'checking');
+  state.lastQuality=level;reportQuality(level,loss,jitter);
+  if(level==='good'){setConnection('live','연결됨');$('#live-dot').classList.add('on');return;}
+  setConnection('','음성 확인 중');$('#live-dot').classList.remove('on');
+  if(level==='bad'&&Date.now()>state.recoveryCooldownUntil){state.recoveryCooldownUntil=Date.now()+15000;state.reconnectFailures++;scheduleReconnect();}
+}
+
+function reportQuality(level,loss,jitter){wsSend({type:'quality',level,loss:Math.round(Math.min(100,Math.max(0,loss))*10)/10,jitter:Math.round(Math.min(1000,Math.max(0,jitter)))});}
 
 async function loadPdf(version) {
   state.pdfVersion = Number(version); $('#empty-document').classList.add('hidden'); $('#pdf-stage').classList.remove('hidden'); $('#pdf-name').textContent = state.meta?.pdfName || '답사 자료';

@@ -9,6 +9,11 @@
   <link rel="stylesheet" href="/src/app.css" />
 </head>
 <body class="listener-body">
+  <div id="intro-screen" class="intro-screen" aria-label="주영VOICE 시작 화면">
+    <div class="intro-logo-wrap"><img src="/juyoung-logo.png" alt="주영VOICE" /></div>
+    <strong>주영VOICE</strong>
+    <span>현장 음성 가이드</span>
+  </div>
   <div class="listener-shell">
     <header class="listener-header">
       <div class="brand-row"><div class="brand-mark small"><img src="/juyoung-logo.png" alt="주영VOICE 로고" /></div><div><p class="eyebrow">주영VOICE · LIVE</p><h1 id="room-title">연결 중…</h1></div></div>
@@ -34,7 +39,7 @@
         <span id="live-dot" class="live-dot"></span>
         <div><strong id="audio-status">가이드 방송을 기다리는 중</strong><span id="listener-count">현재 0명 접속</span></div>
       </div>
-      <button id="listen-button" class="primary-button tall" type="button">🎧 듣기 시작</button>
+      <button id="listen-button" class="primary-button tall hidden" type="button">소리 다시 연결</button>
       <div class="vote-buttons" role="group" aria-label="가이드 질문에 응답">
         <button id="yes-button" class="vote-button yes" type="button">🔵 예!</button>
         <button id="no-button" class="vote-button no" type="button">🔴 아니요!</button>

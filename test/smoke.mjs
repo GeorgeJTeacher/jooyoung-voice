@@ -79,6 +79,10 @@ const listenerHello = await nextMessage(listener, (message) => message.type === 
 assert.equal(guideHello.meta.roomId, roomId);
 assert.equal(listenerHello.meta.roomId, roomId);
 
+const qualityMessage = nextMessage(guide, (message) => message.type === 'quality:summary' && message.good === 1);
+listener.send(JSON.stringify({ type:'quality', level:'good', loss:0.4, jitter:12 }));
+assert.equal((await qualityMessage).good,1);
+
 const pageMessage = nextMessage(listener, (message) => message.type === 'page');
 guide.send(JSON.stringify({ type: 'page', page: 2 }));
 assert.equal((await pageMessage).page, 2);

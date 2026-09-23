@@ -25,3 +25,13 @@ test('guide secrets stay in the URL fragment', async () => {
   assert.match(source, /guideUrl\}#\$\{data\.guideToken/);
   assert.doesNotMatch(source, /guideToken.*searchParams/);
 });
+
+test('listener intro and automatic audio quality flow are wired', async () => {
+  const markup=await readFile('listen.html','utf8');
+  const source=await readFile('src/listen.js','utf8');
+  assert.match(markup,/id="intro-screen"/);
+  assert.match(markup,/id="listen-button" class="[^"]*hidden/);
+  assert.match(source,/async function authenticateAccess[\s\S]*?await unlockAudioOutput\(\)/);
+  assert.match(source,/\.getStats\(\)/);
+  assert.match(source,/type:'quality'/);
+});

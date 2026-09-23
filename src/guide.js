@@ -117,11 +117,14 @@ function handleWsMessage(event) {
   if (m.type === 'hello') {
     state.meta = m.meta; $('#listener-count').textContent = m.presence.listeners;
     $('#yes-count').textContent = Number(m.votes?.yes || 0); $('#no-count').textContent = Number(m.votes?.no || 0);
+    updateQualitySummary(m.quality || {});
     if (m.page && m.strokes) viewer.setPageStrokes(m.page, m.strokes);
   } else if (m.type === 'presence') {
     $('#listener-count').textContent = m.listeners;
   } else if (m.type === 'votes') {
     $('#yes-count').textContent = Number(m.yes || 0); $('#no-count').textContent = Number(m.no || 0);
+  } else if (m.type === 'quality:summary') {
+    updateQualitySummary(m);
   } else if (m.type === 'snapshot') {
     viewer.setPageStrokes(m.page, m.strokes || []);
   } else if (m.type === 'stroke:remove') {
@@ -134,6 +137,8 @@ function handleWsMessage(event) {
     if (m.pdfVersion !== state.loadedPdfVersion) loadPdf(m.pdfVersion);
   }
 }
+
+function updateQualitySummary(summary){const good=Number(summary.good||0),bad=Number(summary.bad||0),checking=Number(summary.checking||0)+Number(summary.unknown||0),paused=Number(summary.paused||0),chip=$('#quality-chip');if(bad>0)setChip(chip,'bad',`음질 문제 ${bad}명`);else if(checking>0)setChip(chip,'warn',`음질 확인 ${checking}명`);else if(good>0)setChip(chip,'live',`음질 좋음 ${good}명`);else if(paused>0)setChip(chip,'warn',`일시정지 ${paused}명`);else setChip(chip,'','음질 확인 0명');}
 
 async function enumerateMics() {
   const devices = await navigator.mediaDevices.enumerateDevices();
