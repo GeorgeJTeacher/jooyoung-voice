@@ -1,0 +1,3 @@
+CF_REALTIME_APP_ID=your_realtime_app_id
+CF_REALTIME_APP_SECRET=your_realtime_app_secret
+CREATE_KEY=choose-a-long-private-room-creation-code

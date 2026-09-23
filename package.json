@@ -1,0 +1,31 @@
+{
+  "name": "guide-live",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite --configLoader runner --host 0.0.0.0",
+    "build": "vite build --configLoader runner",
+    "preview": "vite preview --configLoader runner --host 0.0.0.0",
+    "cf:dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "check": "node --check worker/index.js && node --check src/guide.js && node --check src/listen.js && node --check src/main.js && node --check src/shared/api.js && node --check src/shared/pdf-viewer.js && node --test test/static.test.js",
+    "smoke": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "pdfjs-dist": "6.3.289",
+    "qrcode": "1.5.4"
+  },
+  "devDependencies": {
+    "vite": "7.1.5",
+    "wrangler": "4.135.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.1": true,
+    "workerd@1.20260918.1": true
+  }
+}

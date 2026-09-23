@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#101318" />
+  <link rel="icon" href="/juyoung-logo.png" />
+  <title>주영VOICE · 가이드</title>
+  <link rel="stylesheet" href="/src/app.css" />
+</head>
+<body class="app-body">
+  <div id="guide-app" class="app-shell">
+    <header class="topbar">
+      <div class="brand-row">
+        <div class="brand-mark small"><img src="/juyoung-logo.png" alt="주영VOICE 로고" /></div>
+        <div>
+          <p class="eyebrow">주영VOICE · GUIDE</p>
+          <h1 id="room-title">불러오는 중…</h1>
+        </div>
+      </div>
+      <div class="status-row">
+        <span id="live-chip" class="status-chip idle"><i></i><b>대기</b></span>
+        <span class="status-chip"><span aria-hidden="true">🎧</span><b id="listener-count">0</b>명</span>
+        <span class="status-chip vote-yes-chip"><span aria-hidden="true">🔵</span>예 <b id="yes-count">0</b>명</span>
+        <span class="status-chip vote-no-chip"><span aria-hidden="true">🔴</span>아니요 <b id="no-count">0</b>명</span>
+        <span id="network-chip" class="status-chip"><i></i><b>연결 확인</b></span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-panel">
+        <button id="control-panel-toggle" class="control-panel-toggle" type="button" aria-expanded="true">
+          <span>방송 · 참가 QR</span><b aria-hidden="true">▴</b>
+        </button>
+        <div id="control-panel-content" class="control-panel-content">
+        <section class="panel-section audio-panel">
+          <div class="section-heading compact">
+            <div><p class="eyebrow">LIVE AUDIO</p><h2>음성 방송</h2></div>
+          </div>
+          <div class="mic-orb" id="mic-orb"><span>🎙</span><i></i></div>
+          <button id="broadcast-button" class="primary-button tall" type="button">방송 시작</button>
+          <div class="button-grid">
+            <button id="mute-button" class="secondary-button" type="button" disabled>잠시 멈춤</button>
+            <button id="stop-button" class="danger-button" type="button" disabled>방송 종료</button>
+          </div>
+          <label class="select-label">마이크
+            <select id="mic-select"><option value="">기본 마이크</option></select>
+          </label>
+          <div class="meter" aria-label="마이크 입력 레벨"><span id="meter-fill"></span></div>
+          <p id="audio-note" class="muted-copy">이어폰 사용을 안내한 뒤 방송을 시작하세요.</p>
+        </section>
+
+        <section class="panel-section invite-panel">
+          <div class="section-heading compact"><div><p class="eyebrow">JOIN</p><h2>참가 QR</h2></div></div>
+          <div class="qr-wrap"><canvas id="qr-canvas" width="220" height="220" aria-label="참가 QR 코드"></canvas></div>
+          <div class="room-code" id="room-code">------</div>
+          <div class="button-grid">
+            <button id="share-button" class="secondary-button" type="button">공유</button>
+            <button id="copy-button" class="secondary-button" type="button">링크 복사</button>
+          </div>
+        </section>
+        </div>
+      </aside>
+
+      <section class="document-panel">
+        <div class="document-toolbar">
+          <div class="doc-left">
+            <label class="upload-button">PDF 올리기<input id="pdf-input" type="file" accept="application/pdf" hidden /></label>
+            <span id="pdf-name" class="doc-name">PDF 없음</span>
+          </div>
+          <div class="page-controls">
+            <button id="prev-page" class="icon-button" type="button" aria-label="이전 페이지">‹</button>
+            <span><b id="page-number">0</b> / <span id="page-count">0</span></span>
+            <button id="next-page" class="icon-button" type="button" aria-label="다음 페이지">›</button>
+          </div>
+          <div class="zoom-controls" aria-label="PDF 확대 도구">
+            <button id="zoom-out" class="icon-button" type="button" aria-label="축소">−</button>
+            <button id="zoom-reset" class="zoom-label" type="button">100%</button>
+            <button id="zoom-in" class="icon-button" type="button" aria-label="확대">＋</button>
+          </div>
+        </div>
+
+        <div id="annotation-toolbar" class="annotation-toolbar top-tools hidden" role="toolbar" aria-label="필기 도구">
+          <button class="tool-button icon-only active" data-tool="pen" type="button" aria-label="펜">✎ <span>펜</span></button>
+          <button class="tool-button icon-only" data-tool="highlighter" type="button" aria-label="형광펜">▰ <span>형광펜</span></button>
+          <button class="tool-button icon-only" data-tool="rect" type="button" aria-label="사각형">□ <span>사각형</span></button>
+          <button class="tool-button icon-only laser-tool" data-tool="laser" type="button" aria-label="레이저">● <span>레이저</span></button>
+          <button class="tool-button icon-only" data-tool="eraser" type="button" aria-label="지우개">⌫ <span>지우개</span></button>
+          <button class="tool-button icon-only" data-tool="pan" type="button" aria-label="이동">✋ <span>이동</span></button>
+          <span class="tool-separator"></span>
+          <button class="color-dot active" data-color="#e53935" style="--swatch:#e53935" aria-label="빨간색" type="button"></button>
+          <button class="color-dot" data-color="#1565c0" style="--swatch:#1565c0" aria-label="파란색" type="button"></button>
+          <button class="color-dot" data-color="#111827" style="--swatch:#111827" aria-label="검은색" type="button"></button>
+          <span class="tool-separator"></span>
+          <button id="undo-button" class="tool-button icon-only" type="button" aria-label="실행취소">↶ <span>실행취소</span></button>
+          <button id="clear-button" class="tool-button icon-only" type="button" aria-label="현재 쪽 지우기">⌧ <span>현재 쪽 지우기</span></button>
+        </div>
+
+        <div id="empty-document" class="empty-document">
+          <div class="empty-icon">PDF</div>
+          <h2>브로슈어 PDF를 올려주세요</h2>
+          <p>참가자 화면에도 같은 PDF가 표시되고, 페이지 이동과 필기가 실시간으로 따라갑니다.</p>
+        </div>
+
+        <div id="pdf-stage" class="pdf-stage hidden" aria-label="PDF와 실시간 필기 영역">
+          <div id="pdf-frame" class="pdf-frame">
+            <canvas id="pdf-canvas"></canvas>
+            <canvas id="ink-canvas"></canvas>
+            <i id="laser-dot" class="laser-dot"></i>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script src="/compat.js"></script>
+  <script type="module" src="/src/guide.js"></script>
+</body>
+</html>

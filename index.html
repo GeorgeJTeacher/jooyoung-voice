@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#101318" />
+  <link rel="icon" href="/juyoung-logo.png" />
+  <title>주영VOICE · 실시간 현장 가이드</title>
+  <link rel="stylesheet" href="/src/app.css" />
+</head>
+<body class="home-body">
+  <main class="home-shell">
+    <section class="hero">
+      <div class="brand-mark"><img src="/juyoung-logo.png" alt="주영VOICE 로고" /></div>
+      <div>
+        <p class="eyebrow">주영VOICE</p>
+        <h1>한 사람의 설명을<br>50명의 이어폰으로.</h1>
+        <p class="hero-copy">앱 설치와 참가자 로그인 없이, QR 하나로 저지연 음성·PDF·실시간 필기를 함께 전달합니다.</p>
+      </div>
+    </section>
+
+    <section class="create-card" aria-labelledby="create-title">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">NEW SESSION</p>
+          <h2 id="create-title">새 답사 방 만들기</h2>
+        </div>
+        <span class="privacy-chip">참가자 개인정보 없음</span>
+      </div>
+      <form id="create-form" class="form-stack">
+        <label>
+          <span>답사 이름</span>
+          <input id="room-title" maxlength="60" value="현장 답사 LIVE" autocomplete="off" required />
+        </label>
+        <label>
+          <span>방 생성 코드</span>
+          <input id="create-key" type="password" autocomplete="current-password" placeholder="배포 시 설정한 CREATE_KEY" required />
+        </label>
+        <label>
+          <span>참가 비밀번호</span>
+          <input id="listener-password" type="password" minlength="4" maxlength="20" inputmode="text" autocomplete="new-password" placeholder="참가자에게 알려줄 4~20자리" required />
+        </label>
+        <label>
+          <span>자동 종료</span>
+          <select id="expires-hours">
+            <option value="3">3시간</option>
+            <option value="4" selected>4시간</option>
+            <option value="6">6시간</option>
+            <option value="8">8시간</option>
+          </select>
+        </label>
+        <button class="primary-button" type="submit">가이드 방 만들기</button>
+        <p id="create-message" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section class="feature-strip" aria-label="주요 기능">
+      <div><strong>1 → 50</strong><span>단방향 오디오</span></div>
+      <div><strong>WebRTC</strong><span>저지연 음성</span></div>
+      <div><strong>PDF</strong><span>페이지·필기 동기화</span></div>
+      <div><strong>QR</strong><span>무설치 참여</span></div>
+    </section>
+  </main>
+  <script src="/compat.js"></script>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

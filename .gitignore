@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.dev.vars
+.wrangler/
+.wrangler-config/
+.wrangler-dry-run/
+.DS_Store

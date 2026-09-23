@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#101318" />
+  <link rel="icon" href="/juyoung-logo.png" />
+  <title>주영VOICE · 듣기</title>
+  <link rel="stylesheet" href="/src/app.css" />
+</head>
+<body class="listener-body">
+  <div class="listener-shell">
+    <header class="listener-header">
+      <div class="brand-row"><div class="brand-mark small"><img src="/juyoung-logo.png" alt="주영VOICE 로고" /></div><div><p class="eyebrow">주영VOICE · LIVE</p><h1 id="room-title">연결 중…</h1></div></div>
+      <span id="connection-chip" class="status-chip"><i></i><b>연결 중</b></span>
+    </header>
+
+    <section id="access-card" class="listen-card access-card hidden">
+      <div>
+        <p class="eyebrow">PRIVATE ROOM</p>
+        <h2>참가 비밀번호 입력</h2>
+        <p class="muted-copy">가이드에게 받은 비밀번호를 입력해야 방송과 자료를 볼 수 있습니다.</p>
+      </div>
+      <form id="access-form" class="form-stack compact-form">
+        <label><span>참가 비밀번호</span><input id="access-password" type="password" minlength="4" maxlength="20" autocomplete="current-password" required /></label>
+        <button class="primary-button tall" type="submit">방송 입장</button>
+        <p id="access-message" class="form-message" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <section id="listener-content" class="listener-protected hidden">
+    <section class="listen-card">
+      <div class="listen-status">
+        <span id="live-dot" class="live-dot"></span>
+        <div><strong id="audio-status">가이드 방송을 기다리는 중</strong><span id="listener-count">현재 0명 접속</span></div>
+      </div>
+      <button id="listen-button" class="primary-button tall" type="button">🎧 듣기 시작</button>
+      <div class="vote-buttons" role="group" aria-label="가이드 질문에 응답">
+        <button id="yes-button" class="vote-button yes" type="button">🔵 예!</button>
+        <button id="no-button" class="vote-button no" type="button">🔴 아니요!</button>
+      </div>
+      <p id="vote-note" class="confirm-note">응답은 10초 동안 가이드에게 표시됩니다.</p>
+      <div class="volume-row">
+        <span>작게</span><input id="volume" type="range" min="0" max="1" step="0.05" value="1" aria-label="음량" /><span>크게</span>
+      </div>
+      <p class="safety-note">주변 상황을 확인할 수 있는 음량으로 들어주세요.</p>
+      <button id="exit-button" class="exit-button" type="button">참가 종료</button>
+      <audio id="live-audio" autoplay playsinline></audio>
+    </section>
+
+    <section class="listener-document">
+      <div class="document-toolbar listener-toolbar">
+        <div><span class="doc-name" id="pdf-name">자료 준비 중</span></div>
+        <label class="follow-toggle"><input id="follow-toggle" type="checkbox" checked /><span>가이드 따라가기</span></label>
+      </div>
+      <div id="guide-page-hint" class="guide-page-hint hidden"><button id="jump-guide" type="button">가이드가 <b>1</b>쪽을 설명 중 · 이동</button></div>
+      <div id="empty-document" class="empty-document compact-empty"><div class="empty-icon">PDF</div><h2>가이드 자료를 기다리는 중</h2></div>
+      <div id="pdf-stage" class="pdf-stage listener-stage hidden">
+        <div id="pdf-frame" class="pdf-frame"><canvas id="pdf-canvas"></canvas><canvas id="ink-canvas"></canvas><i id="laser-dot" class="laser-dot"></i></div>
+      </div>
+      <div id="manual-pages" class="page-controls listener-pages hidden">
+        <button id="prev-page" class="icon-button" type="button">‹</button>
+        <span><b id="page-number">0</b> / <span id="page-count">0</span></span>
+        <button id="next-page" class="icon-button" type="button">›</button>
+      </div>
+    </section>
+    </section>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </div>
+  <script src="/compat.js"></script>
+  <script type="module" src="/src/listen.js"></script>
+</body>
+</html>
