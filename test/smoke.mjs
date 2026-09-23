@@ -87,6 +87,10 @@ const pageMessage = nextMessage(listener, (message) => message.type === 'page');
 guide.send(JSON.stringify({ type: 'page', page: 2 }));
 assert.equal((await pageMessage).page, 2);
 
+const focusMessage = nextMessage(listener, (message) => message.type === 'focus');
+guide.send(JSON.stringify({ type:'focus', region:{x:.2,y:.3,width:.25,height:.18} }));
+assert.deepEqual((await focusMessage).region,{x:.2,y:.3,width:.25,height:.18});
+
 const committed = nextMessage(listener, (message) => message.type === 'stroke:committed');
 const stroke = { id: 'smoke-stroke', page: 2, tool: 'pen', color: '#e53935', width: 0.0045, opacity: 1, points: [0.1, 0.2, 0.5, 0.2, 0.3, 0.5] };
 guide.send(JSON.stringify({ type: 'stroke:end', id: stroke.id, page: 2, stroke }));

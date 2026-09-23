@@ -79,8 +79,11 @@ export class PdfInkViewer {
   }
 
   getView() {
-    if (this.stage.scrollWidth > this.stage.clientWidth) this.view.x = (this.stage.scrollLeft + this.stage.clientWidth / 2) / this.stage.scrollWidth;
-    if (this.stage.scrollHeight > this.stage.clientHeight) this.view.y = (this.stage.scrollTop + this.stage.clientHeight / 2) / this.stage.scrollHeight;
+    const stageRect=this.stage.getBoundingClientRect(), frameRect=this.frame.getBoundingClientRect();
+    const frameLeft=frameRect.left-stageRect.left+this.stage.scrollLeft;
+    const frameTop=frameRect.top-stageRect.top+this.stage.scrollTop;
+    if (this.frame.clientWidth > this.stage.clientWidth) this.view.x = (this.stage.scrollLeft + this.stage.clientWidth / 2-frameLeft) / this.frame.clientWidth;
+    if (this.frame.clientHeight > this.stage.clientHeight) this.view.y = (this.stage.scrollTop + this.stage.clientHeight / 2-frameTop) / this.frame.clientHeight;
     return { scale: this.view.scale, x:Math.min(1,Math.max(0,this.view.x)), y:Math.min(1,Math.max(0,this.view.y)) };
   }
 
@@ -88,21 +91,29 @@ export class PdfInkViewer {
     if (!Array.isArray(points) || points.length < 6) return null;
     const x1=Math.min(points[0],points[3]), x2=Math.max(points[0],points[3]);
     const y1=Math.min(points[1],points[4]), y2=Math.max(points[1],points[4]);
-    const width=x2-x1, height=y2-y1;
+    return this.viewForRegion({x:x1,y:y1,width:x2-x1,height:y2-y1});
+  }
+
+  viewForRegion(region) {
+    const x1=Math.min(1,Math.max(0,Number(region?.x)||0)), y1=Math.min(1,Math.max(0,Number(region?.y)||0));
+    const width=Math.min(1-x1,Math.max(0,Number(region?.width)||0)), height=Math.min(1-y1,Math.max(0,Number(region?.height)||0));
     if (width < .04 || height < .04) return null;
     const baseWidth=this.frame.clientWidth/Math.max(1,this.view.scale);
     const baseHeight=this.frame.clientHeight/Math.max(1,this.view.scale);
     const usableWidth=Math.max(1,this.stage.clientWidth-16), usableHeight=Math.max(1,this.stage.clientHeight-16);
     const scale=Math.min(4,Math.max(1,Math.min(usableWidth/(baseWidth*width),usableHeight/(baseHeight*height))*.92));
-    return { scale, x:(x1+x2)/2, y:(y1+y2)/2 };
+    return { scale, x:x1+width/2, y:y1+height/2 };
   }
 
   applyCenter() {
     requestAnimationFrame(() => {
+      const stageRect=this.stage.getBoundingClientRect(), frameRect=this.frame.getBoundingClientRect();
+      const frameLeft=frameRect.left-stageRect.left+this.stage.scrollLeft;
+      const frameTop=frameRect.top-stageRect.top+this.stage.scrollTop;
       const maxX = Math.max(0, this.stage.scrollWidth - this.stage.clientWidth);
       const maxY = Math.max(0, this.stage.scrollHeight - this.stage.clientHeight);
-      this.stage.scrollLeft = Math.min(maxX, Math.max(0, this.view.x * this.stage.scrollWidth - this.stage.clientWidth / 2));
-      this.stage.scrollTop = Math.min(maxY, Math.max(0, this.view.y * this.stage.scrollHeight - this.stage.clientHeight / 2));
+      this.stage.scrollLeft = Math.min(maxX, Math.max(0, frameLeft + this.view.x * this.frame.clientWidth - this.stage.clientWidth / 2));
+      this.stage.scrollTop = Math.min(maxY, Math.max(0, frameTop + this.view.y * this.frame.clientHeight - this.stage.clientHeight / 2));
     });
   }
 

@@ -45,6 +45,8 @@ test('v1.2 guide drawer and rectangle zoom are wired', async () => {
   assert.match(markup,/id="zoom-back"/);
   assert.match(source,/viewForRect\(stroke\.points\)/);
   assert.match(viewer,/viewForRect\(points\)/);
+  assert.match(source,/type:'focus',region/);
+  assert.match(viewer,/viewForRegion\(region\)/);
 });
 
 test('participant PDF follows voting controls without manual navigation', async () => {
@@ -53,4 +55,13 @@ test('participant PDF follows voting controls without manual navigation', async 
   assert.ok(markup.indexOf('id="yes-button"') < markup.indexOf('class="listener-document"'));
   assert.doesNotMatch(markup,/id="follow-toggle"|id="manual-pages"/);
   assert.doesNotMatch(source,/manualPage|jumpToGuide/);
+});
+
+test('rectangle focus is validated and recalculated for listeners', async () => {
+  const worker=await readFile('worker/index.js','utf8');
+  const listener=await readFile('src/listen.js','utf8');
+  assert.match(worker,/m\.type === 'focus'/);
+  assert.match(worker,/sanitizeRegion\(m\.region\)/);
+  assert.match(listener,/m\.type === 'focus'/);
+  assert.match(listener,/viewer\.viewForRegion\(m\.region\)/);
 });

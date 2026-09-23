@@ -100,6 +100,8 @@ async function handleWs(event) {
     if (viewer.pdf) { await viewer.renderPage(m.page); wsSend({ type: 'snapshot:page', page: m.page }); }
   } else if (m.type === 'view') {
     state.guideView = m.view; if(viewer.pdf) await viewer.setView(m.view);
+  } else if (m.type === 'focus') {
+    const view=viewer.viewForRegion(m.region); if(view){state.guideView=view;await viewer.setView(view);}
   } else if (m.type === 'laser') {
     clearTimeout(state.laserTimer); if(!m.active||Number(m.page)!==viewer.pageNumber){renderLaser({x:0,y:0},false);return;} renderLaser({x:Number(m.x),y:Number(m.y)},true); state.laserTimer=setTimeout(()=>renderLaser({x:0,y:0},false),700);
   } else if (m.type === 'snapshot') {

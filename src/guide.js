@@ -379,7 +379,10 @@ async function pointerUp() {
     viewer.finishLiveStroke(stroke.id); state.zoomSelection=null;
     const view=viewer.viewForRect(stroke.points);
     if(!view){showToast(toast,'확대할 부분을 조금 더 크게 선택해주세요.');return;}
-    rememberView(); await new Promise(resolve=>setTimeout(resolve,220)); await applyGuideView(view); return;
+    const x1=Math.min(stroke.points[0],stroke.points[3]),x2=Math.max(stroke.points[0],stroke.points[3]);
+    const y1=Math.min(stroke.points[1],stroke.points[4]),y2=Math.max(stroke.points[1],stroke.points[4]);
+    const region={x:x1,y:y1,width:x2-x1,height:y2-y1};
+    rememberView(); await new Promise(resolve=>setTimeout(resolve,220)); await applyGuideView(view); wsSend({type:'focus',region}); return;
   }
   viewer.addStroke(stroke.page, stroke); viewer.finishLiveStroke(stroke.id); wsSend({ type: 'stroke:end', id: stroke.id, page: stroke.page, stroke });
 }
