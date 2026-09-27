@@ -6,7 +6,7 @@ const listenerId = getListenerId();
 const $ = (s) => document.querySelector(s);
 const toast = $('#toast');
 const viewer = new PdfInkViewer({ pdfCanvas: $('#pdf-canvas'), inkCanvas: $('#ink-canvas'), frame: $('#pdf-frame'), stage: $('#pdf-stage') });
-const state = { ws: null, wsAttempt: 0, pc: null, rtc: null, wantAudio: false, playing: false, connecting: false, connectionGeneration: 0, audioAvailable: false, audioPaused: false, guidePage: 1, pdfVersion: 0, wakeLock: null, reconnectTimer: null, confirmTimer: null, laserTimer: null, laserHistory:[], meta: null, audioSourceVersion: 0, ticketWaiter: null, audioContext: null, audioGain: null, audioSourceNode: null, exiting:false, accessToken:'', qualityTimer:null, previousInbound:null, qualityBadStreak:0, qualityGoodStreak:0, lastQuality:'unknown', reconnectFailures:0, recoveryCooldownUntil:0 };
+const state = { ws: null, wsAttempt: 0, pc: null, rtc: null, wantAudio: false, playing: false, connecting: false, connectionGeneration: 0, audioAvailable: false, audioPaused: false, guidePage: 1, pdfVersion: 0, wakeLock: null, reconnectTimer: null, confirmTimer: null, laserTimer: null, laserHistory:[], meta: null, audioSourceVersion: 0, ticketWaiter: null, audioContext: null, audioGain: null, audioSourceNode: null, exiting:false, accessToken:'', qualityTimer:null, previousInbound:null, qualityBadStreak:0, qualityGoodStreak:0, lastQuality:'unknown', reconnectFailures:0, recoveryCooldownUntil:0, headphones:false, headphonesManual:false };
 
 function makeClientId(){ if(crypto.randomUUID)return crypto.randomUUID(); const bytes=crypto.getRandomValues(new Uint8Array(16)); return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(''); }
 function getListenerId(){ const key='guide-live-listener-id'; try{ let id=localStorage.getItem(key); if(!id){id=makeClientId();localStorage.setItem(key,id);} return id; }catch{return makeClientId();} }
@@ -36,6 +36,8 @@ function bind() {
   $('#yes-button').addEventListener('click', () => sendVote('yes'));
   $('#no-button').addEventListener('click', () => sendVote('no'));
   $('#exit-button').addEventListener('click', endParticipation);
+  $('#headphone-toggle').addEventListener('change', (event) => { state.headphonesManual=true; setHeadphoneStatus(event.target.checked,'manual'); });
+  navigator.mediaDevices?.addEventListener?.('devicechange', detectHeadphones);
   document.addEventListener('visibilitychange', async () => { if (document.visibilityState === 'visible' && state.wantAudio && !state.wakeLock) state.wakeLock = await requestWakeLock(); });
 }
 
@@ -58,7 +60,7 @@ async function connectWs() {
   try {
     const {ticket}=await api(`/api/rooms/${room}/listener-ws-ticket`,{method:'POST',headers:{'X-Listener-Token':state.accessToken}});
     const ws = new WebSocket(wsUrl(`/api/rooms/${room}/ws?role=listener&client=${encodeURIComponent(listenerId)}&ticket=${encodeURIComponent(ticket)}`)); state.ws = ws;
-    ws.addEventListener('open', () => { state.wsAttempt = 0; setConnection('', '음성 확인 중'); });
+    ws.addEventListener('open', () => { state.wsAttempt = 0; setConnection('', '음성 확인 중'); sendHeadphoneStatus(); detectHeadphones(); });
     ws.addEventListener('message', handleWs);
     ws.addEventListener('close', async () => { if (state.ws !== ws || state.exiting) return; setConnection('warn', '재연결 중'); state.wsAttempt++; await sleep(Math.min(8000, 500 * 2 ** state.wsAttempt)); connectWs(); });
   } catch { await sleep(1000); connectWs(); }
@@ -77,6 +79,13 @@ async function endParticipation() {
 
 function wsSend(m) { if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify(m)); }
 function setConnection(mode, text) { const el = $('#connection-chip'); el.className = `status-chip ${mode}`; el.querySelector('b').textContent = text; }
+
+function setHeadphoneStatus(active,source){state.headphones=!!active;$('#headphone-toggle').checked=state.headphones;$('#headphone-note').textContent=source==='auto'?'연결된 이어폰을 자동으로 확인했습니다.':'이어폰 사용 상태가 가이드에게 전달됩니다.';sendHeadphoneStatus(source);}
+function sendHeadphoneStatus(source=state.headphonesManual?'manual':'auto'){wsSend({type:'headphones',active:state.headphones,source});}
+async function detectHeadphones(){
+  if(state.headphonesManual||!navigator.mediaDevices?.enumerateDevices)return;
+  try{const devices=await navigator.mediaDevices.enumerateDevices();const pattern=/(headphone|headset|airpods|buds|bluetooth|이어폰|헤드폰|헤드셋|에어팟|버즈)/i;const detected=devices.some(device=>(device.kind==='audiooutput'||device.kind==='audioinput')&&pattern.test(device.label||''));if(detected)setHeadphoneStatus(true,'auto');}catch{}
+}
 
 async function handleWs(event) {
   const m = JSON.parse(event.data);

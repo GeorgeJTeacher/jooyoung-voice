@@ -16,7 +16,8 @@ const state = {
   viewPointers: new Map(), pinchStart: null, pendingView:null, viewTimer: 0, zoomTimer:0,
   laserActive: false, laserSentAt: 0, laserHistory: [], toolLabelTimer: 0,
   viewHistory: [], zoomSelection: null,
-  mixContext: null, micGain: null, musicGain: null, musicSource: null,
+  mixContext: null, mixDestination: null, micSource: null, micGain: null, musicGain: null, musicSource: null,
+  recoveringMic: false, intentionalMicPause: false,
 };
 
 function authOptions(extra = {}) { return { ...extra, token }; }
@@ -45,7 +46,8 @@ function bindControls() {
   $('#control-panel-toggle').addEventListener('click', () => setControlPanelCollapsed(!$('.control-panel').classList.contains('collapsed')));
   $('#control-panel-reopen').addEventListener('click', () => setControlPanelCollapsed(false));
   $('#broadcast-button').addEventListener('click', startBroadcast);
-  $('#mute-button').addEventListener('click', toggleMute);
+  $('#mute-button').addEventListener('click', () => toggleMute());
+  $('#reconnect-mic-button').addEventListener('click', () => recoverMicrophone({ resumeBroadcast:true, manual:true }));
   $('#stop-button').addEventListener('click', stopBroadcast);
   $('#mic-select').addEventListener('change', async () => { if (state.broadcasting) { await stopBroadcast(false); await startBroadcast(); } });
   $('#pdf-input').addEventListener('change', uploadPdf);
@@ -81,7 +83,10 @@ function bindControls() {
   stage.addEventListener('scroll', scheduleViewBroadcast, { passive:true });
   stage.addEventListener('wheel', (event) => { if (!event.ctrlKey) return; event.preventDefault(); changeZoom(viewer.view.scale + (event.deltaY < 0 ? .25 : -.25)); }, { passive:false });
   document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible' && state.broadcasting && !state.wakeLock) state.wakeLock = await requestWakeLock();
+    if (document.visibilityState === 'visible' && state.broadcasting) {
+      if (!state.wakeLock) state.wakeLock = await requestWakeLock();
+      if (!state.muted && !microphoneIsHealthy()) recoverMicrophone({ resumeBroadcast:true });
+    }
   });
 }
 
@@ -122,6 +127,7 @@ function handleWsMessage(event) {
     state.meta = m.meta; $('#listener-count').textContent = m.presence.listeners;
     $('#yes-count').textContent = Number(m.votes?.yes || 0); $('#no-count').textContent = Number(m.votes?.no || 0);
     updateQualitySummary(m.quality || {});
+    updateHeadphoneSummary(m.headphones || { active:0, listeners:m.presence.listeners });
     if (m.page && m.strokes) viewer.setPageStrokes(m.page, m.strokes);
   } else if (m.type === 'presence') {
     $('#listener-count').textContent = m.listeners;
@@ -129,6 +135,8 @@ function handleWsMessage(event) {
     $('#yes-count').textContent = Number(m.yes || 0); $('#no-count').textContent = Number(m.no || 0);
   } else if (m.type === 'quality:summary') {
     updateQualitySummary(m);
+  } else if (m.type === 'headphones:summary') {
+    updateHeadphoneSummary(m);
   } else if (m.type === 'snapshot') {
     viewer.setPageStrokes(m.page, m.strokes || []);
   } else if (m.type === 'stroke:remove') {
@@ -143,6 +151,7 @@ function handleWsMessage(event) {
 }
 
 function updateQualitySummary(summary){const good=Number(summary.good||0),bad=Number(summary.bad||0),checking=Number(summary.checking||0)+Number(summary.unknown||0),paused=Number(summary.paused||0),chip=$('#quality-chip');if(bad>0)setChip(chip,'bad',`음질 문제 ${bad}명`);else if(checking>0)setChip(chip,'warn',`음질 확인 ${checking}명`);else if(good>0)setChip(chip,'live',`음질 좋음 ${good}명`);else if(paused>0)setChip(chip,'warn',`일시정지 ${paused}명`);else setChip(chip,'','음질 확인 0명');}
+function updateHeadphoneSummary(summary){const active=Number(summary.active||0),listeners=Number(summary.listeners||0),chip=$('#headphone-chip');setChip(chip,active>0?'live':'',`이어폰 ${active}/${listeners}명`);}
 
 async function enumerateMics() {
   const devices = await navigator.mediaDevices.enumerateDevices();
@@ -160,16 +169,13 @@ async function startBroadcast() {
   const button = $('#broadcast-button'); button.disabled = true; button.textContent = '마이크 연결 중…';
   try {
     await ensureMixContext();
-    const deviceId = $('#mic-select').value;
-    state.stream = await navigator.mediaDevices.getUserMedia({
-      video: false,
-      audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 },
-    });
+    state.stream = await requestMicrophoneStream();
     await enumerateMics();
     state.audioTrack = state.stream.getAudioTracks()[0];
     state.outboundStream = await prepareMixedStream(state.stream);
     await publishStream(state.outboundStream);
-    state.broadcasting = true; state.muted = false;
+    state.broadcasting = true; state.muted = false; state.intentionalMicPause = false;
+    watchMicrophoneTrack(state.audioTrack);
     state.wakeLock = await requestWakeLock();
     button.textContent = '방송 중';
     $('#mute-button').disabled = false; $('#stop-button').disabled = false;
@@ -191,10 +197,19 @@ async function ensureMixContext() {
   if(state.mixContext.state!=='running')await state.mixContext.resume();
 }
 
+function requestMicrophoneStream() {
+  const deviceId = $('#mic-select').value;
+  return navigator.mediaDevices.getUserMedia({
+    video:false,
+    audio:{ deviceId:deviceId?{exact:deviceId}:undefined, echoCancellation:true, noiseSuppression:true, autoGainControl:true, channelCount:1 },
+  });
+}
+
 async function prepareMixedStream(micStream) {
   const context=state.mixContext;
   const destination=context.createMediaStreamDestination();
   const micSource=context.createMediaStreamSource(micStream);
+  state.mixDestination=destination; state.micSource=micSource;
   state.micGain=context.createGain(); state.micGain.gain.value=1;
   state.musicGain=context.createGain(); state.musicGain.gain.value=0;
   micSource.connect(state.micGain).connect(destination);
@@ -253,17 +268,76 @@ function scheduleRecovery() {
   }, 1200);
 }
 
-function toggleMute() {
+async function toggleMute() {
   if (!state.audioTrack || !state.micGain || !state.musicGain) return;
-  state.muted = !state.muted; state.audioTrack.enabled = !state.muted;
+  if (state.recoveringMic) return;
+  if (state.muted) {
+    await recoverMicrophone({ resumeBroadcast:true, manual:true });
+    return;
+  }
+  state.muted = true; state.intentionalMicPause = true; state.audioTrack.enabled = false;
   const now=state.mixContext.currentTime;
   state.micGain.gain.cancelScheduledValues(now); state.musicGain.gain.cancelScheduledValues(now);
-  state.micGain.gain.setValueAtTime(state.muted?0:1,now);
-  state.musicGain.gain.setValueAtTime(state.muted ? 0.24 : 0,now);
-  $('#mute-button').textContent = state.muted ? '방송 재개' : '잠시 멈춤';
-  setChip($('#live-chip'), state.muted ? 'warn' : 'live', state.muted ? '일시정지' : 'LIVE');
-  $('#audio-note').textContent = state.muted ? '참가자에게 방송 일시정지가 표시됩니다.' : '음성이 참가자 이어폰으로 실시간 전송되고 있습니다.';
-  wsSend({ type: 'audio:pause', paused: state.muted });
+  state.micGain.gain.setValueAtTime(0,now); state.musicGain.gain.setValueAtTime(.24,now);
+  $('#mute-button').textContent = '방송 재개'; setChip($('#live-chip'),'warn','일시정지');
+  $('#audio-note').textContent = '마이크는 꺼져 있고 참가자에게 대기 음악이 재생됩니다.';
+  wsSend({ type:'audio:pause', paused:true });
+}
+
+function microphoneIsHealthy(){return !!state.audioTrack&&state.audioTrack.readyState==='live'&&!state.audioTrack.muted&&state.mixContext?.state!=='closed';}
+
+function watchMicrophoneTrack(track){
+  if(!track)return;
+  track.addEventListener('ended',()=>{if(state.broadcasting&&!state.intentionalMicPause)showMicRecovery();},{once:true});
+  track.addEventListener('mute',()=>{if(state.broadcasting&&!state.intentionalMicPause)showMicRecovery();});
+}
+
+function showMicRecovery(){
+  $('#reconnect-mic-button').classList.remove('hidden');
+  $('#audio-note').textContent='마이크 입력이 끊겼습니다. 자동 복구 중입니다.';
+  recoverMicrophone({resumeBroadcast:true});
+}
+
+async function recoverMicrophone({resumeBroadcast=false,manual=false}={}){
+  if(!state.broadcasting||state.recoveringMic)return false;
+  state.recoveringMic=true; const reconnect=$('#reconnect-mic-button'),mute=$('#mute-button');
+  reconnect.disabled=true; mute.disabled=true; reconnect.classList.remove('hidden'); reconnect.textContent='마이크 연결 중…';
+  try{
+    await ensureMixContext();
+    if(!state.mixDestination||!state.micGain||state.mixContext.state==='closed')await rebuildAudioPipeline();
+    else {
+      const oldStream=state.stream,oldSource=state.micSource;
+      try{oldSource?.disconnect();}catch{} oldStream?.getTracks().forEach(track=>track.stop());
+      state.stream=null; state.audioTrack=null; state.micSource=null;
+      const nextStream=await requestMicrophoneStream(); const nextTrack=nextStream.getAudioTracks()[0];
+      if(!nextTrack)throw new Error('사용 가능한 마이크를 찾지 못했습니다.');
+      const nextSource=state.mixContext.createMediaStreamSource(nextStream); nextSource.connect(state.micGain);
+      state.stream=nextStream; state.audioTrack=nextTrack; state.micSource=nextSource;
+      watchMicrophoneTrack(nextTrack); await enumerateMics(); startMeter(nextStream);
+    }
+    if(resumeBroadcast){
+      state.audioTrack.enabled=true; state.intentionalMicPause=false; state.muted=false;
+      const now=state.mixContext.currentTime; state.micGain.gain.cancelScheduledValues(now); state.musicGain.gain.cancelScheduledValues(now);
+      state.micGain.gain.setValueAtTime(1,now); state.musicGain.gain.setValueAtTime(0,now);
+      mute.textContent='잠시 멈춤'; setChip($('#live-chip'),'live','LIVE');
+      $('#audio-note').textContent='마이크가 복구되어 음성을 다시 전송하고 있습니다.'; wsSend({type:'audio:pause',paused:false});
+    }
+    reconnect.classList.add('hidden'); return true;
+  }catch(error){
+    state.muted=true; state.intentionalMicPause=true;
+    if(state.micGain&&state.musicGain&&state.mixContext?.state!=='closed'){const now=state.mixContext.currentTime;state.micGain.gain.setValueAtTime(0,now);state.musicGain.gain.setValueAtTime(.24,now);}
+    setChip($('#live-chip'),'bad','마이크 확인'); $('#audio-note').textContent='자동 복구에 실패했습니다. 마이크 다시 연결을 눌러주세요.';
+    reconnect.classList.remove('hidden'); if(manual)showToast(toast,`마이크 연결 실패: ${error.message}`,4000); return false;
+  }finally{state.recoveringMic=false;reconnect.disabled=false;reconnect.textContent='마이크 다시 연결';mute.disabled=false;}
+}
+
+async function rebuildAudioPipeline(){
+  await api(`/api/rooms/${room}/rtc/publish/stop`,authOptions({method:'POST'})).catch(()=>{}); state.pc?.close(); state.pc=null;
+  state.stream?.getTracks().forEach(track=>track.stop()); state.outboundStream?.getTracks().forEach(track=>track.stop());
+  try{state.micSource?.disconnect();}catch{} try{state.musicSource?.stop();}catch{} await state.mixContext?.close().catch(()=>{});
+  state.stream=null; state.outboundStream=null; state.audioTrack=null; state.mixContext=null; state.mixDestination=null; state.micSource=null; state.micGain=null; state.musicGain=null; state.musicSource=null;
+  await ensureMixContext(); state.stream=await requestMicrophoneStream(); state.audioTrack=state.stream.getAudioTracks()[0];
+  state.outboundStream=await prepareMixedStream(state.stream); await publishStream(state.outboundStream); watchMicrophoneTrack(state.audioTrack); await enumerateMics(); startMeter(state.stream);
 }
 
 async function stopBroadcast(resetButton = true) {
@@ -274,6 +348,7 @@ async function stopBroadcast(resetButton = true) {
   if (resetButton) {
     const button = $('#broadcast-button'); button.disabled = false; button.textContent = '방송 시작';
     $('#mute-button').disabled = true; $('#mute-button').textContent = '잠시 멈춤'; $('#stop-button').disabled = true; $('#mic-orb').classList.remove('live'); setChip($('#live-chip'), 'idle', '대기');
+    $('#reconnect-mic-button').classList.add('hidden');
     $('#audio-note').textContent = '방송이 종료되었습니다.';
   }
 }
@@ -283,7 +358,7 @@ function cleanupMedia() {
   state.pc?.close(); state.pc = null;
   state.stream?.getTracks().forEach(t => t.stop()); state.stream = null; state.audioTrack = null;
   state.outboundStream?.getTracks().forEach(t=>t.stop()); state.outboundStream=null;
-  try{state.musicSource?.stop();}catch{} state.musicSource=null; state.micGain=null; state.musicGain=null;
+  try{state.micSource?.disconnect();}catch{} try{state.musicSource?.stop();}catch{} state.musicSource=null; state.micSource=null; state.mixDestination=null; state.micGain=null; state.musicGain=null;
   state.mixContext?.close().catch(()=>{}); state.mixContext=null;
   state.meterContext?.close().catch(()=>{}); state.meterContext=null;
 }

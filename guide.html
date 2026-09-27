@@ -20,7 +20,8 @@
       </div>
       <div class="status-row">
         <span id="live-chip" class="status-chip idle"><i></i><b>대기</b></span>
-        <span class="status-chip"><span aria-hidden="true">🎧</span><b id="listener-count">0</b>명</span>
+        <span class="status-chip"><span aria-hidden="true">👥</span><b id="listener-count">0</b>명</span>
+        <span id="headphone-chip" class="status-chip"><span aria-hidden="true">🎧</span><b>이어폰 0/0명</b></span>
         <span class="status-chip vote-yes-chip"><span aria-hidden="true">🔵</span>예 <b id="yes-count">0</b>명</span>
         <span class="status-chip vote-no-chip"><span aria-hidden="true">🔴</span>아니요 <b id="no-count">0</b>명</span>
         <span id="quality-chip" class="status-chip"><i></i><b>음질 확인 0명</b></span>
@@ -45,6 +46,7 @@
             <button id="mute-button" class="secondary-button" type="button" disabled>잠시 멈춤</button>
             <button id="stop-button" class="danger-button" type="button" disabled>방송 종료</button>
           </div>
+          <button id="reconnect-mic-button" class="secondary-button hidden" type="button">마이크 다시 연결</button>
           <label class="select-label">마이크
             <select id="mic-select"><option value="">기본 마이크</option></select>
           </label>

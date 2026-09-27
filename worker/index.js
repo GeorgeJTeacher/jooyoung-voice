@@ -204,8 +204,8 @@ export class Room extends DurableObject {
     const clientId=String(url.searchParams.get('client')||crypto.randomUUID()).slice(0,80);
     if (role === 'listener') {const ticket=url.searchParams.get('ticket')||'',expires=await this.ctx.storage.get(`listener-ws:${ticket}`);if(!expires||expires<Date.now())return new Response('Forbidden',{status:403});await this.ctx.storage.delete(`listener-ws:${ticket}`);if(this.countListeners()>=50&&!this.hasListenerClient(clientId))return new Response('Room full',{status:429});}
     if (role === 'guide') { const ticket = url.searchParams.get('ticket') || ''; const expires = await this.ctx.storage.get(`ticket:${ticket}`); if (!expires || expires < Date.now()) return new Response('Forbidden',{status:403}); await this.ctx.storage.delete(`ticket:${ticket}`); }
-    const pair = new WebSocketPair(); const [client, server] = Object.values(pair); this.ctx.acceptWebSocket(server); server.serializeAttachment({ id:crypto.randomUUID(), clientId, role, joinedAt:Date.now(), lastAudioTicketAt:0, vote:null, voteUntil:0, quality:'unknown', qualityAt:0 });
-    const strokes = await this.loadPage(meta.currentPage); const audioSource = await this.ctx.storage.get('audioSource'); server.send(JSON.stringify({ type:'hello', meta, page:meta.currentPage, strokes, presence:{listeners:this.countListeners()}, votes:this.countVotes(), quality:this.countQuality(), audioAvailable:!!audioSource, audioPaused:!!audioSource?.paused, audioVersion:audioSource?.version || 0 })); this.broadcastPresence(); this.broadcastVotes(); this.broadcastQuality();
+    const pair = new WebSocketPair(); const [client, server] = Object.values(pair); this.ctx.acceptWebSocket(server); server.serializeAttachment({ id:crypto.randomUUID(), clientId, role, joinedAt:Date.now(), lastAudioTicketAt:0, vote:null, voteUntil:0, quality:'unknown', qualityAt:0, headphones:false, headphonesAt:0, headphoneSource:'unknown' });
+    const strokes = await this.loadPage(meta.currentPage); const audioSource = await this.ctx.storage.get('audioSource'); server.send(JSON.stringify({ type:'hello', meta, page:meta.currentPage, strokes, presence:{listeners:this.countListeners()}, votes:this.countVotes(), quality:this.countQuality(), headphones:this.countHeadphones(), audioAvailable:!!audioSource, audioPaused:!!audioSource?.paused, audioVersion:audioSource?.version || 0 })); this.broadcastPresence(); this.broadcastVotes(); this.broadcastQuality(); this.broadcastHeadphones();
     return new Response(null,{status:101,webSocket:client});
   }
 
@@ -216,6 +216,7 @@ export class Room extends DurableObject {
     if (m.type === 'snapshot:page') { const page = clamp(Number(m.page)||1,1,500); ws.send(JSON.stringify({type:'snapshot',page,strokes:await this.loadPage(page)})); return; }
     if (m.type === 'vote' && role === 'listener') { attachment.vote=['yes','no'].includes(m.choice)?m.choice:null; attachment.voteUntil=attachment.vote?Date.now()+10_000:0; ws.serializeAttachment(attachment); this.broadcastVotes(); return; }
     if (m.type === 'quality' && role === 'listener') { attachment.quality=['good','checking','bad','paused'].includes(m.level)?m.level:'unknown'; attachment.qualityAt=Date.now(); attachment.loss=clamp(Number(m.loss)||0,0,100); attachment.jitter=clamp(Number(m.jitter)||0,0,1000); ws.serializeAttachment(attachment); this.broadcastQuality(); return; }
+    if (m.type === 'headphones' && role === 'listener') { attachment.headphones=!!m.active; attachment.headphonesAt=Date.now(); attachment.headphoneSource=m.source==='manual'?'manual':'auto'; ws.serializeAttachment(attachment); this.broadcastHeadphones(); return; }
     if (m.type === 'audio:ticket' && role === 'listener') { const now=Date.now(); if(now-Number(attachment.lastAudioTicketAt||0)<1500) return; const ticket=randomToken(18); await this.ctx.storage.put(`listener-ticket:${ticket}`,now+30_000); attachment.lastAudioTicketAt=now; ws.serializeAttachment(attachment); ws.send(JSON.stringify({type:'audio:ticket',ticket})); return; }
     if (role !== 'guide') return;
     if (m.type === 'laser') { this.broadcast({type:'laser',active:!!m.active,x:clamp(Number(m.x)||0,0,1),y:clamp(Number(m.y)||0,0,1),page:clamp(Number(m.page)||1,1,500)},'listener'); return; }
@@ -232,8 +233,8 @@ export class Room extends DurableObject {
     if (m.type === 'page:clear') { const page=clamp(Number(m.page)||1,1,500); await this.savePage(page,[]); this.broadcast({type:'page:clear',page}); return; }
   }
 
-  webSocketClose(ws) { this.broadcastPresence(); this.broadcastVotes(); this.broadcastQuality(); }
-  webSocketError(ws) { try { ws.close(1011,'WebSocket error'); } catch {} this.broadcastPresence(); this.broadcastVotes(); this.broadcastQuality(); }
+  webSocketClose(ws) { this.broadcastPresence(); this.broadcastVotes(); this.broadcastQuality(); this.broadcastHeadphones(); }
+  webSocketError(ws) { try { ws.close(1011,'WebSocket error'); } catch {} this.broadcastPresence(); this.broadcastVotes(); this.broadcastQuality(); this.broadcastHeadphones(); }
 
   async alarm() { for (const ws of this.ctx.getWebSockets()) try { ws.close(1000,'Room expired'); } catch {} const meta=await this.ctx.storage.get('meta'); if(meta?.roomId) await this.env.PDFS.delete(`rooms/${meta.roomId}/document.pdf`).catch(()=>{}); await this.ctx.storage.deleteAll(); }
   async requireMeta(){ const meta=await this.ctx.storage.get('meta'); if(!meta) throw new Error('방을 찾을 수 없습니다.'); return meta; }
@@ -243,9 +244,11 @@ export class Room extends DurableObject {
   hasListenerClient(clientId){ return this.ctx.getWebSockets().some(ws=>{const a=ws.deserializeAttachment();return a?.role==='listener'&&(a.clientId||a.id)===clientId;}); }
   countVotes(){ const now=Date.now(), counts={yes:0,no:0}, latest=new Map(); for(const ws of this.ctx.getWebSockets()){const a=ws.deserializeAttachment(); if(a?.role!=='listener'||Number(a.voteUntil||0)<=now||!(a.vote in counts))continue; const key=a.clientId||a.id, old=latest.get(key); if(!old||Number(a.voteUntil)>Number(old.voteUntil))latest.set(key,a);} for(const a of latest.values())counts[a.vote]++; return counts; }
   countQuality(){ const now=Date.now(),counts={good:0,checking:0,bad:0,paused:0,unknown:0},latest=new Map();for(const ws of this.ctx.getWebSockets()){const a=ws.deserializeAttachment();if(a?.role!=='listener')continue;const key=a.clientId||a.id,old=latest.get(key);if(!old||Number(a.qualityAt||a.joinedAt)>Number(old.qualityAt||old.joinedAt))latest.set(key,a);}for(const a of latest.values()){let level=a.quality;if(!a.qualityAt||now-Number(a.qualityAt)>12000)level='unknown';if(!(level in counts))level='unknown';counts[level]++;}return counts;}
+  countHeadphones(){const latest=new Map();for(const ws of this.ctx.getWebSockets()){const a=ws.deserializeAttachment();if(a?.role!=='listener')continue;const key=a.clientId||a.id,old=latest.get(key);if(!old||Number(a.headphonesAt||a.joinedAt)>Number(old.headphonesAt||old.joinedAt))latest.set(key,a);}let active=0;for(const a of latest.values())if(a.headphones)active++;return{active,listeners:latest.size};}
   broadcastPresence(){ this.broadcast({type:'presence',listeners:this.countListeners()}); }
   broadcastVotes(){ this.broadcast({type:'votes',...this.countVotes()},'guide'); }
   broadcastQuality(){ this.broadcast({type:'quality:summary',...this.countQuality()},'guide'); }
+  broadcastHeadphones(){ this.broadcast({type:'headphones:summary',...this.countHeadphones()},'guide'); }
   broadcast(payload, role=null){ const text=JSON.stringify(payload); for(const ws of this.ctx.getWebSockets()){ const a=ws.deserializeAttachment(); if(role && a?.role!==role) continue; try{ws.send(text);}catch{}} }
 }
 

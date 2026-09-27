@@ -79,3 +79,27 @@ test('iPad guide drawer scrolls in a single column', async () => {
   assert.match(css,/\.control-panel \{[^}]*overflow-y:auto/);
   assert.match(css,/@media \(max-width: 820px\)[\s\S]*?\.control-panel-content \{ display:flex; flex-direction:column; \}/);
 });
+
+test('v1.3 iPad microphone recovery is wired', async () => {
+  const markup=await readFile('guide.html','utf8');
+  const source=await readFile('src/guide.js','utf8');
+  assert.match(markup,/id="reconnect-mic-button"/);
+  assert.match(source,/async function recoverMicrophone/);
+  assert.match(source,/requestMicrophoneStream\(\)/);
+  assert.match(source,/createMediaStreamSource\(nextStream\)/);
+  assert.match(source,/state\.mixContext\.resume\(\)/);
+  assert.match(source,/async function rebuildAudioPipeline/);
+});
+
+test('v1.3 headphone status has automatic and manual paths', async () => {
+  const markup=await readFile('listen.html','utf8');
+  const listener=await readFile('src/listen.js','utf8');
+  const guide=await readFile('guide.html','utf8');
+  const worker=await readFile('worker/index.js','utf8');
+  assert.match(markup,/id="headphone-toggle"/);
+  assert.match(listener,/enumerateDevices\(\)/);
+  assert.match(listener,/devicechange/);
+  assert.match(listener,/type:'headphones'/);
+  assert.match(guide,/id="headphone-chip"/);
+  assert.match(worker,/headphones:summary/);
+});
