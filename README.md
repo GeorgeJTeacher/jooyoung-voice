@@ -27,6 +27,17 @@ PDF 업로드 ─> Cloudflare R2 ─> 각 참가자 브라우저의 PDF.js
 
 Cloudflare Realtime 비밀키는 Worker에만 존재하며 브라우저로 전달하지 않습니다.
 
+## GitHub 자동 배포
+
+`main` 브랜치에 변경이 올라오면 GitHub Actions가 검사와 빌드를 통과한 뒤 `guide-live` Worker를 자동 배포합니다.
+
+GitHub 저장소의 **Settings → Secrets and variables → Actions**에 다음 Repository secret 두 개가 필요합니다.
+
+- `CLOUDFLARE_API_TOKEN`: `guide-live` 배포 권한만 가진 Cloudflare API 토큰
+- `CLOUDFLARE_ACCOUNT_ID`: Cloudflare 계정 ID
+
+Realtime App ID/Secret과 `CREATE_KEY`는 이미 Worker secret으로 보관되므로 GitHub에 중복 저장하지 않습니다. 자동 배포가 이 값들을 삭제하지도 않습니다.
+
 ## 1. 준비
 
 필요한 것:
